@@ -69,17 +69,24 @@ async function initDatabase() {
 		db.run(sql`CREATE INDEX IF NOT EXISTS idx_posts_thread_id ON posts(thread_id)`);
 		db.run(sql`CREATE INDEX IF NOT EXISTS idx_threads_updated_at ON threads(updated_at)`);
 
-		// 最高管理者が存在しない場合は作成
+		// 最高管理者が存在しない場合は作成、存在する場合はユーザー名を更新
 		const superadmin = db.select().from(admins).where(eq(admins.role, 'superadmin')).get();
 		if (!superadmin) {
 			const superadminPassword = process.env.ADMIN_PASSWORD || '5151test';
 			db.insert(admins).values({
-				username: 'superadmin',
+				username: 'test5151',
 				password: hashPassword(superadminPassword),
 				role: 'superadmin',
 				createdAt: new Date()
 			}).run();
 			console.log('Superadmin created');
+		} else if (superadmin.username !== 'test5151') {
+			// ユーザー名を更新
+			db.update(admins)
+				.set({ username: 'test5151' })
+				.where(eq(admins.role, 'superadmin'))
+				.run();
+			console.log('Superadmin username updated to test5151');
 		}
 
 		console.log('Database initialized');
