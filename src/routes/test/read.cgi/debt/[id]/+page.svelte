@@ -7,6 +7,7 @@
 	let name = $state('');
 	let email = $state('');
 	let body = $state('');
+	let persona = $state(1);
 	let isSubmitting = $state(false);
 
 	function handleSubmit() {
@@ -98,6 +99,19 @@
 					<label for="email">E-mail:</label>
 					<input type="text" id="email" name="email" bind:value={email} placeholder="sage" />
 				</div>
+				{#if data.isAdmin}
+				<div class="form-row">
+					<label for="persona">ペルソナ:</label>
+					<select id="persona" name="persona" bind:value={persona}>
+						<option value={1}>ペルソナ 1</option>
+						<option value={2}>ペルソナ 2</option>
+						<option value={3}>ペルソナ 3</option>
+						<option value={4}>ペルソナ 4</option>
+						<option value={5}>ペルソナ 5</option>
+					</select>
+					<span class="hint">※管理者専用</span>
+				</div>
+				{/if}
 				<div class="form-row">
 					<label for="body">本文:</label>
 					<textarea id="body" name="body" bind:value={body} rows="5" required></textarea>
@@ -369,5 +383,17 @@
 
 	.footer a:hover {
 		text-decoration: underline;
+	}
+
+	.form-row select {
+		padding: 4px 8px;
+		border: 1px solid #ccc;
+		font-size: 13px;
+	}
+
+	.hint {
+		font-size: 12px;
+		color: #666;
+		margin-left: 10px;
 	}
 </style>

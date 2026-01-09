@@ -2,10 +2,29 @@ import { error, fail } from '@sveltejs/kit';
 import { db, threads, posts, bannedIps } from '$lib/db';
 import { eq, asc } from 'drizzle-orm';
 import { processBody, calculateSize, formatDate } from '$lib/utils/post';
-import { generateUserId, parseName } from '$lib/utils/id';
+import { generateUserId, parseName, generatePersonaId } from '$lib/utils/id';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ params }) => {
+interface SessionData {
+	authenticated: boolean;
+	adminId: number;
+	username: string;
+	role: string;
+}
+
+function getSession(cookies: { get: (name: string) => string | undefined }): SessionData | null {
+	const session = cookies.get('admin_session');
+	if (!session) return null;
+	try {
+		const data = JSON.parse(session);
+		if (data.authenticated) return data;
+	} catch {
+		// Invalid session
+	}
+	return null;
+}
+
+export const load: PageServerLoad = async ({ params, cookies }) => {
 	const threadId = parseInt(params.id);
 
 	if (isNaN(threadId)) {
@@ -38,6 +57,10 @@ export const load: PageServerLoad = async ({ params }) => {
 		createdAt: formatDate(post.createdAt)
 	}));
 
+	// 管理者かどうかチェック
+	const session = getSession(cookies);
+	const isAdmin = !!session;
+
 	return {
 		thread: {
 			...thread,
@@ -45,12 +68,13 @@ export const load: PageServerLoad = async ({ params }) => {
 			updatedAt: thread.updatedAt.toISOString()
 		},
 		posts: processedPosts,
-		size
+		size,
+		isAdmin
 	};
 };
 
 export const actions: Actions = {
-	post: async ({ params, request, getClientAddress }) => {
+	post: async ({ params, request, getClientAddress, cookies }) => {
 		const threadId = parseInt(params.id);
 
 		if (isNaN(threadId)) {
@@ -76,17 +100,22 @@ export const actions: Actions = {
 		// IPアドレス取得
 		const ip = getClientAddress();
 
-		// IP規制チェック
-		const banned = await db
-			.select()
-			.from(bannedIps)
-			.where(eq(bannedIps.ipAddress, ip))
-			.get();
+		// 管理者セッション確認
+		const session = getSession(cookies);
 
-		if (banned) {
-			// 期限チェック
-			if (!banned.expiresAt || banned.expiresAt > new Date()) {
-				return fail(403, { error: '書き込み規制中です' });
+		// 一般ユーザーの場合のみIP規制チェック
+		if (!session) {
+			const banned = await db
+				.select()
+				.from(bannedIps)
+				.where(eq(bannedIps.ipAddress, ip))
+				.get();
+
+			if (banned) {
+				// 期限チェック
+				if (!banned.expiresAt || banned.expiresAt > new Date()) {
+					return fail(403, { error: '書き込み規制中です' });
+				}
 			}
 		}
 
@@ -95,6 +124,7 @@ export const actions: Actions = {
 		const nameInput = formData.get('name')?.toString() || '';
 		const email = formData.get('email')?.toString() || '';
 		const body = formData.get('body')?.toString() || '';
+		const personaStr = formData.get('persona')?.toString() || '';
 
 		// バリデーション
 		if (!body.trim()) {
@@ -108,8 +138,14 @@ export const actions: Actions = {
 		// 名前・トリップ処理
 		const { name, trip } = parseName(nameInput);
 
-		// ユーザーID生成
-		const userId = generateUserId(ip);
+		// ユーザーID生成（管理者でペルソナ指定がある場合はペルソナID）
+		let userId: string;
+		if (session && personaStr) {
+			const persona = parseInt(personaStr);
+			userId = generatePersonaId(persona);
+		} else {
+			userId = generateUserId(ip);
+		}
 
 		// 次のレス番号
 		const nextPostNumber = thread.postCount + 1;
@@ -124,7 +160,7 @@ export const actions: Actions = {
 			trip,
 			email: email.substring(0, 100),
 			body,
-			ipAddress: ip,
+			ipAddress: session ? '127.0.0.1' : ip, // 管理者はIP記録しない
 			userId,
 			createdAt: now,
 			isDeleted: false,
