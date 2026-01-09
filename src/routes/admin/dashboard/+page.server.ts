@@ -2,6 +2,7 @@ import { redirect, fail } from '@sveltejs/kit';
 import { db, threads, posts, bannedIps, admins } from '$lib/db';
 import { eq, desc, ne } from 'drizzle-orm';
 import { createHash } from 'crypto';
+import { generatePersonaId } from '$lib/utils/id';
 import type { PageServerLoad, Actions } from './$types';
 
 function hashPassword(password: string): string {
@@ -168,6 +169,7 @@ export const actions: Actions = {
 		const threadNumber = parseInt(formData.get('threadNumber')?.toString() || '1');
 		const title = formData.get('title')?.toString() || '';
 		const body = formData.get('body')?.toString() || '';
+		const persona = parseInt(formData.get('persona')?.toString() || '1');
 
 		if (!title.trim()) {
 			return fail(400, { error: 'タイトルを入力してください' });
@@ -190,20 +192,21 @@ export const actions: Actions = {
 
 		const newThread = result[0];
 
-		// 本文がある場合は最初のレスを作成
+		// 本文がある場合は最初のレスを作成（匿名ユーザーとして）
 		if (body.trim()) {
+			const userId = generatePersonaId(persona);
 			await db.insert(posts).values({
 				threadId: newThread.id,
 				postNumber: 1,
-				name: '管理人★',
+				name: '名無しさん＠お腹いっぱい。',
 				trip: null,
 				email: '',
 				body,
 				ipAddress: '127.0.0.1',
-				userId: 'ADMIN',
+				userId,
 				createdAt: now,
 				isDeleted: false,
-				isAdmin: true
+				isAdmin: false
 			});
 		}
 

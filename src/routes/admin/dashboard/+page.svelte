@@ -8,6 +8,7 @@
 	let newThreadNumber = $state(1);
 	let newThreadTitle = $state('');
 	let newThreadBody = $state('');
+	let newThreadPersona = $state(1);
 
 	// IP規制
 	let banIpAddress = $state('');
@@ -123,6 +124,17 @@
 			<div class="form-row">
 				<label for="title">タイトル:</label>
 				<input type="text" id="title" name="title" bind:value={newThreadTitle} placeholder="闇金情報スレ(新)19" required />
+			</div>
+			<div class="form-row">
+				<label for="persona">投稿ペルソナ:</label>
+				<select id="persona" name="persona" bind:value={newThreadPersona}>
+					<option value={1}>ペルソナ 1</option>
+					<option value={2}>ペルソナ 2</option>
+					<option value={3}>ペルソナ 3</option>
+					<option value={4}>ペルソナ 4</option>
+					<option value={5}>ペルソナ 5</option>
+				</select>
+				<span class="hint">※ペルソナごとに異なるIDで投稿されます（日替わり）</span>
 			</div>
 			<div class="form-row">
 				<label for="body">>>1本文:</label>
@@ -438,5 +450,11 @@
 
 	.footer a:hover {
 		text-decoration: underline;
+	}
+
+	.hint {
+		font-size: 12px;
+		color: #666;
+		margin-left: 10px;
 	}
 </style>

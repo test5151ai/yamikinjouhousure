@@ -1,15 +1,26 @@
 import { createHash } from 'crypto';
-import { env } from '$env/dynamic/private';
 
 /**
  * ユーザーID生成（日替わり）
  * IP + 日付 + シークレットからハッシュを生成
  */
 export function generateUserId(ip: string): string {
-	const secret = env.SECRET_KEY || 'default-secret-key';
+	const secret = process.env.SECRET_KEY || 'default-secret-key';
 	const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 	const hash = createHash('sha256').update(`${ip}${today}${secret}`).digest('hex');
 	return hash.substring(0, 9); // 9文字（末尾に0を付与する形式を想定）
+}
+
+/**
+ * ペルソナID生成（管理者用・日替わり）
+ * ペルソナ番号 + 日付 + シークレットからハッシュを生成
+ * 一般ユーザーと同じ形式のIDを生成するが、別人として振る舞える
+ */
+export function generatePersonaId(personaNumber: number): string {
+	const secret = process.env.SECRET_KEY || 'default-secret-key';
+	const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+	const hash = createHash('sha256').update(`persona${personaNumber}${today}${secret}`).digest('hex');
+	return hash.substring(0, 9);
 }
 
 /**
