@@ -1,0 +1,61 @@
+/* グローバルリセット */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+/* ベーススタイル */
+html {
+	font-size: 14px;
+}
+
+body {
+	font-family: 'Meiryo', 'MS PGothic', 'Hiragino Kaku Gothic Pro', sans-serif;
+	line-height: 1.6;
+	color: #333;
+	background: #efefef;
+}
+
+a {
+	color: #0000cc;
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:visited {
+	color: #551a8b;
+}
+
+/* フォーム要素 */
+input,
+textarea,
+select,
+button {
+	font-family: inherit;
+	font-size: inherit;
+}
+
+/* スクロールバー（Webkit用） */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+	background: #c1c1c1;
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: #a8a8a8;
+}
