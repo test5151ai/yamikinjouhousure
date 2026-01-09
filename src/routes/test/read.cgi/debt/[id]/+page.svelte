@@ -2,20 +2,28 @@
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 
-	let { data } = $props();
+	let { data, form } = $props();
 
 	let name = $state('');
 	let email = $state('');
 	let body = $state('');
-	let persona = $state(1);
+	let persona = $state(data.personas[0]?.id || 1);
 	let isSubmitting = $state(false);
+	let successMessage = $state('');
 
 	function handleSubmit() {
 		isSubmitting = true;
-		return async ({ result }: { result: { type: string } }) => {
+		successMessage = '';
+		return async ({ result, update }: { result: { type: string; data?: { postNumber?: number } }; update: () => Promise<void> }) => {
+			await update();
 			if (result.type === 'success') {
 				body = '';
+				successMessage = `書き込みが完了しました`;
 				await invalidateAll();
+				// 3秒後にメッセージを消す
+				setTimeout(() => {
+					successMessage = '';
+				}, 3000);
 			}
 			isSubmitting = false;
 		};
@@ -88,6 +96,12 @@
 	</div>
 
 	{#if !data.thread.isArchived && data.thread.postCount < 1000}
+		{#if form?.error}
+			<div class="alert error">{form.error}</div>
+		{/if}
+		{#if successMessage}
+			<div class="alert success">{successMessage}</div>
+		{/if}
 		<section class="post-form-section">
 			<h2>書き込み</h2>
 			<form method="POST" action="?/post" use:enhance={handleSubmit} class="post-form">
@@ -99,15 +113,13 @@
 					<label for="email">E-mail:</label>
 					<input type="text" id="email" name="email" bind:value={email} placeholder="sage" />
 				</div>
-				{#if data.isAdmin}
+				{#if data.isAdmin && data.personas.length > 0}
 				<div class="form-row">
 					<label for="persona">ペルソナ:</label>
 					<select id="persona" name="persona" bind:value={persona}>
-						<option value={1}>ペルソナ 1</option>
-						<option value={2}>ペルソナ 2</option>
-						<option value={3}>ペルソナ 3</option>
-						<option value={4}>ペルソナ 4</option>
-						<option value={5}>ペルソナ 5</option>
+						{#each data.personas as p}
+							<option value={p.id}>{p.name}</option>
+						{/each}
 					</select>
 					<span class="hint">※管理者専用</span>
 				</div>
@@ -395,5 +407,24 @@
 		font-size: 12px;
 		color: #666;
 		margin-left: 10px;
+	}
+
+	.alert {
+		padding: 12px;
+		margin: 10px 0;
+		border-radius: 4px;
+		font-size: 14px;
+	}
+
+	.alert.error {
+		background: #ffebee;
+		color: #c62828;
+		border: 1px solid #ef9a9a;
+	}
+
+	.alert.success {
+		background: #e8f5e9;
+		color: #2e7d32;
+		border: 1px solid #a5d6a7;
 	}
 </style>

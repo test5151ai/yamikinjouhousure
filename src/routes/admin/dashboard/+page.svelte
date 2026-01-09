@@ -8,7 +8,7 @@
 	let newThreadNumber = $state(1);
 	let newThreadTitle = $state('');
 	let newThreadBody = $state('');
-	let newThreadPersona = $state(1);
+	let newThreadPersona = $state(data.personas[0]?.id || 1);
 
 	// IP規制
 	let banIpAddress = $state('');
@@ -22,8 +22,37 @@
 	let newAdminUsername = $state('');
 	let newAdminPassword = $state('');
 
+	// ペルソナ管理
+	let newPersonaName = $state('');
+	let newPersonaDescription = $state('');
+	let editingPersonaId = $state<number | null>(null);
+	let editPersonaName = $state('');
+	let editPersonaDescription = $state('');
+	let expandedPersonaId = $state<number | null>(null);
+
+	function startEditPersona(persona: { id: number; name: string; description: string | null }) {
+		editingPersonaId = persona.id;
+		editPersonaName = persona.name;
+		editPersonaDescription = persona.description || '';
+	}
+
+	function cancelEditPersona() {
+		editingPersonaId = null;
+		editPersonaName = '';
+		editPersonaDescription = '';
+	}
+
+	function togglePersonaHistory(personaId: number) {
+		if (expandedPersonaId === personaId) {
+			expandedPersonaId = null;
+		} else {
+			expandedPersonaId = personaId;
+		}
+	}
+
 	function handleFormSubmit() {
-		return async ({ result }: { result: { type: string } }) => {
+		return async ({ result, update }: { result: { type: string }; update: () => Promise<void> }) => {
+			await update();
 			if (result.type === 'success' || result.type === 'redirect') {
 				await invalidateAll();
 				// フォームリセット
@@ -35,6 +64,11 @@
 				deletePostId = '';
 				newAdminUsername = '';
 				newAdminPassword = '';
+				newPersonaName = '';
+				newPersonaDescription = '';
+				editingPersonaId = null;
+				editPersonaName = '';
+				editPersonaDescription = '';
 			}
 		};
 	}
@@ -128,11 +162,9 @@
 			<div class="form-row">
 				<label for="persona">投稿ペルソナ:</label>
 				<select id="persona" name="persona" bind:value={newThreadPersona}>
-					<option value={1}>ペルソナ 1</option>
-					<option value={2}>ペルソナ 2</option>
-					<option value={3}>ペルソナ 3</option>
-					<option value={4}>ペルソナ 4</option>
-					<option value={5}>ペルソナ 5</option>
+					{#each data.personas as persona}
+						<option value={persona.id}>{persona.name} ({persona.postCount}件)</option>
+					{/each}
 				</select>
 				<span class="hint">※ペルソナごとに異なるIDで投稿されます（日替わり）</span>
 			</div>
@@ -244,6 +276,89 @@
 				{/if}
 			</tbody>
 		</table>
+	</section>
+
+	<section class="section">
+		<h2>ペルソナ管理</h2>
+		<p class="section-description">ペルソナごとに異なるIDで投稿できます。IDは日替わりで変わります。</p>
+
+		<form method="POST" action="?/addPersona" use:enhance={handleFormSubmit}>
+			<div class="form-row inline">
+				<label for="personaName">新規ペルソナ:</label>
+				<input type="text" id="personaName" name="personaName" bind:value={newPersonaName} placeholder="ペルソナ名" required />
+				<input type="text" name="personaDescription" bind:value={newPersonaDescription} placeholder="説明（任意）" />
+				<button type="submit">追加</button>
+			</div>
+		</form>
+
+		<div class="persona-list">
+			{#each data.personas as persona}
+				<div class="persona-card">
+					{#if editingPersonaId === persona.id}
+						<form method="POST" action="?/updatePersona" use:enhance={handleFormSubmit} class="persona-edit-form">
+							<input type="hidden" name="personaId" value={persona.id} />
+							<div class="persona-edit-row">
+								<input type="text" name="personaName" bind:value={editPersonaName} required />
+								<input type="text" name="personaDescription" bind:value={editPersonaDescription} placeholder="説明" />
+								<button type="submit" class="save-btn">保存</button>
+								<button type="button" class="cancel-btn" onclick={cancelEditPersona}>キャンセル</button>
+							</div>
+						</form>
+					{:else}
+						<div class="persona-header">
+							<div class="persona-info">
+								<span class="persona-name">{persona.name}</span>
+								{#if persona.description}
+									<span class="persona-desc">{persona.description}</span>
+								{/if}
+								<span class="persona-stats">{persona.postCount}件の投稿</span>
+							</div>
+							<div class="persona-actions">
+								<button type="button" class="edit-btn" onclick={() => startEditPersona(persona)}>編集</button>
+								<button type="button" class="history-btn" onclick={() => togglePersonaHistory(persona.id)}>
+									{expandedPersonaId === persona.id ? '履歴を閉じる' : '履歴を見る'}
+								</button>
+								{#if persona.postCount === 0}
+									<form method="POST" action="?/deletePersona" use:enhance={handleFormSubmit} class="inline-form">
+										<input type="hidden" name="personaId" value={persona.id} />
+										<button type="submit" class="delete-btn" onclick={(e) => { if (!confirm('本当に削除しますか？')) e.preventDefault(); }}>削除</button>
+									</form>
+								{/if}
+							</div>
+						</div>
+						{#if expandedPersonaId === persona.id && persona.recentPosts.length > 0}
+							<div class="persona-history">
+								<h4>最新の投稿（最大5件）</h4>
+								<table class="history-table">
+									<thead>
+										<tr>
+											<th>スレッドID</th>
+											<th>レス番</th>
+											<th>内容</th>
+											<th>投稿日時</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each persona.recentPosts as post}
+											<tr>
+												<td><a href="/test/read.cgi/debt/{post.threadId}" target="_blank">{post.threadId}</a></td>
+												<td>{post.postNumber}</td>
+												<td class="post-preview">{post.body}</td>
+												<td>{new Date(post.createdAt).toLocaleString('ja-JP')}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{:else if expandedPersonaId === persona.id}
+							<div class="persona-history">
+								<p class="no-posts">このペルソナでの投稿はありません</p>
+							</div>
+						{/if}
+					{/if}
+				</div>
+			{/each}
+		</div>
 	</section>
 
 	<footer class="footer">
@@ -456,5 +571,152 @@
 		font-size: 12px;
 		color: #666;
 		margin-left: 10px;
+	}
+
+	.section-description {
+		font-size: 13px;
+		color: #666;
+		margin-bottom: 15px;
+	}
+
+	.persona-list {
+		margin-top: 20px;
+	}
+
+	.persona-card {
+		background: #fafafa;
+		border: 1px solid #e0e0e0;
+		border-radius: 4px;
+		padding: 12px;
+		margin-bottom: 10px;
+	}
+
+	.persona-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+
+	.persona-info {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.persona-name {
+		font-weight: bold;
+		font-size: 14px;
+	}
+
+	.persona-desc {
+		color: #666;
+		font-size: 13px;
+	}
+
+	.persona-stats {
+		color: #4a90d9;
+		font-size: 13px;
+	}
+
+	.persona-actions {
+		display: flex;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
+	.edit-btn, .history-btn, .save-btn, .cancel-btn {
+		padding: 4px 10px;
+		border: 1px solid #666;
+		background: #f0f0f0;
+		cursor: pointer;
+		font-size: 12px;
+		border-radius: 4px;
+	}
+
+	.edit-btn:hover, .history-btn:hover {
+		background: #e0e0e0;
+	}
+
+	.save-btn {
+		background: #4a90d9;
+		color: #fff;
+		border-color: #4a90d9;
+	}
+
+	.save-btn:hover {
+		background: #3a7bc8;
+	}
+
+	.cancel-btn {
+		background: #f0f0f0;
+	}
+
+	.persona-edit-form {
+		width: 100%;
+	}
+
+	.persona-edit-row {
+		display: flex;
+		gap: 10px;
+		align-items: center;
+		flex-wrap: wrap;
+	}
+
+	.persona-edit-row input {
+		padding: 6px 10px;
+		border: 1px solid #ccc;
+		border-radius: 4px;
+		font-size: 13px;
+	}
+
+	.persona-history {
+		margin-top: 15px;
+		padding-top: 15px;
+		border-top: 1px dashed #ccc;
+	}
+
+	.persona-history h4 {
+		font-size: 13px;
+		margin-bottom: 10px;
+		color: #333;
+	}
+
+	.history-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 12px;
+	}
+
+	.history-table th,
+	.history-table td {
+		padding: 6px 10px;
+		border: 1px solid #ddd;
+		text-align: left;
+	}
+
+	.history-table th {
+		background: #f5f5f5;
+	}
+
+	.history-table a {
+		color: #0000cc;
+		text-decoration: none;
+	}
+
+	.post-preview {
+		max-width: 300px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.no-posts {
+		color: #666;
+		font-size: 13px;
+		text-align: center;
+		padding: 10px;
 	}
 </style>

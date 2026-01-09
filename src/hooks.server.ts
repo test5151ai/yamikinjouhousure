@@ -1,5 +1,5 @@
 import { db } from '$lib/db';
-import { threads, posts, bannedIps, admins } from '$lib/db/schema';
+import { threads, posts, bannedIps, admins, personas } from '$lib/db/schema';
 import { sql, eq } from 'drizzle-orm';
 import { createHash } from 'crypto';
 
@@ -64,6 +64,43 @@ async function initDatabase() {
 				created_by INTEGER
 			)
 		`);
+
+		// personasテーブル作成
+		db.run(sql`
+			CREATE TABLE IF NOT EXISTS personas (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL,
+				description TEXT,
+				created_at INTEGER NOT NULL
+			)
+		`);
+
+		// postsにpersona_idカラムを追加（既存テーブルの場合）
+		try {
+			db.run(sql`ALTER TABLE posts ADD COLUMN persona_id INTEGER REFERENCES personas(id)`);
+		} catch {
+			// カラムが既に存在する場合は無視
+		}
+
+		// デフォルトペルソナを作成（存在しない場合）
+		const personaCount = db.select().from(personas).all().length;
+		if (personaCount === 0) {
+			const defaultPersonas = [
+				{ name: 'ペルソナ 1', description: 'デフォルトペルソナ' },
+				{ name: 'ペルソナ 2', description: '' },
+				{ name: 'ペルソナ 3', description: '' },
+				{ name: 'ペルソナ 4', description: '' },
+				{ name: 'ペルソナ 5', description: '' }
+			];
+			for (const p of defaultPersonas) {
+				db.insert(personas).values({
+					name: p.name,
+					description: p.description,
+					createdAt: new Date()
+				}).run();
+			}
+			console.log('Default personas created');
+		}
 
 		// インデックス作成
 		db.run(sql`CREATE INDEX IF NOT EXISTS idx_posts_thread_id ON posts(thread_id)`);

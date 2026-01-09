@@ -83,6 +83,25 @@ src/
 
 ## Deployment
 
+### 本番環境情報（重要）
+
+| 項目 | 値 |
+|------|-----|
+| **本番サーバーIP** | `185.215.164.169` |
+| **Coolify URL** | `http://185.215.164.169:8000` |
+| **本番ドメイン** | `egg5ch.net` |
+| **Cloudflare Zone ID** | `9c08fc24e1d2e3feb72c323670ec4ebb` |
+
+**注意**: このサーバー（開発環境）のIPと本番サーバーのIPは異なります。デプロイは必ずCoolify経由で行うこと。
+
+### Coolifyデプロイ手順
+
+1. Coolify (`http://185.215.164.169:8000`) にログイン
+2. yamikinjouhousureプロジェクトを選択
+3. 「Deploy」ボタンでデプロイ実行
+
+### Docker設定
+
 Docker multi-stage build with production target. Coolify deployment requires:
 - Volume mount for `/app/data` (database persistence)
 - Environment variables set in Coolify dashboard

@@ -1,5 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
-import { db, threads, posts, bannedIps } from '$lib/db';
+import { db, threads, posts, bannedIps, personas } from '$lib/db';
 import { eq, asc } from 'drizzle-orm';
 import { processBody, calculateSize, formatDate } from '$lib/utils/post';
 import { generateUserId, parseName, generatePersonaId } from '$lib/utils/id';
@@ -61,6 +61,17 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 	const session = getSession(cookies);
 	const isAdmin = !!session;
 
+	// 管理者の場合はペルソナ一覧も取得
+	let personaList: { id: number; name: string }[] = [];
+	if (isAdmin) {
+		const personasData = await db
+			.select()
+			.from(personas)
+			.orderBy(personas.id)
+			.all();
+		personaList = personasData.map((p) => ({ id: p.id, name: p.name }));
+	}
+
 	return {
 		thread: {
 			...thread,
@@ -69,7 +80,8 @@ export const load: PageServerLoad = async ({ params, cookies }) => {
 		},
 		posts: processedPosts,
 		size,
-		isAdmin
+		isAdmin,
+		personas: personaList
 	};
 };
 
@@ -140,9 +152,11 @@ export const actions: Actions = {
 
 		// ユーザーID生成（管理者でペルソナ指定がある場合はペルソナID）
 		let userId: string;
+		let personaId: number | null = null;
 		if (session && personaStr) {
 			const persona = parseInt(personaStr);
 			userId = generatePersonaId(persona);
+			personaId = persona;
 		} else {
 			userId = generateUserId(ip);
 		}
@@ -164,7 +178,8 @@ export const actions: Actions = {
 			userId,
 			createdAt: now,
 			isDeleted: false,
-			isAdmin: false
+			isAdmin: false,
+			personaId
 		});
 
 		// スレッドの投稿数を更新

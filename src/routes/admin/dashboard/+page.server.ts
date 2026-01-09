@@ -1,6 +1,6 @@
 import { redirect, fail } from '@sveltejs/kit';
-import { db, threads, posts, bannedIps, admins } from '$lib/db';
-import { eq, desc, ne } from 'drizzle-orm';
+import { db, threads, posts, bannedIps, admins, personas } from '$lib/db';
+import { eq, desc, and } from 'drizzle-orm';
 import { createHash } from 'crypto';
 import { generatePersonaId } from '$lib/utils/id';
 import type { PageServerLoad, Actions } from './$types';
@@ -62,6 +62,42 @@ export const load: PageServerLoad = async ({ cookies }) => {
 		}));
 	}
 
+	// ペルソナ一覧を取得
+	const personaList = await db
+		.select()
+		.from(personas)
+		.orderBy(personas.id)
+		.all();
+
+	// ペルソナごとの投稿数と最新投稿を取得
+	const personasWithStats = await Promise.all(
+		personaList.map(async (persona) => {
+			const personaPosts = await db
+				.select()
+				.from(posts)
+				.where(eq(posts.personaId, persona.id))
+				.orderBy(desc(posts.createdAt))
+				.all();
+
+			const recentPosts = personaPosts.slice(0, 5).map((p) => ({
+				id: p.id,
+				threadId: p.threadId,
+				postNumber: p.postNumber,
+				body: p.body.substring(0, 100) + (p.body.length > 100 ? '...' : ''),
+				createdAt: p.createdAt.toISOString()
+			}));
+
+			return {
+				id: persona.id,
+				name: persona.name,
+				description: persona.description,
+				createdAt: persona.createdAt.toISOString(),
+				postCount: personaPosts.length,
+				recentPosts
+			};
+		})
+	);
+
 	return {
 		threads: threadList.map((t) => ({
 			...t,
@@ -74,6 +110,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
 			expiresAt: b.expiresAt?.toISOString() || null
 		})),
 		admins: adminList,
+		personas: personasWithStats,
 		currentUser: {
 			username: session.username,
 			role: session.role
@@ -206,7 +243,8 @@ export const actions: Actions = {
 				userId,
 				createdAt: now,
 				isDeleted: false,
-				isAdmin: false
+				isAdmin: false,
+				personaId: persona
 			});
 		}
 
@@ -312,5 +350,87 @@ export const actions: Actions = {
 		await db.delete(bannedIps).where(eq(bannedIps.id, banId));
 
 		return { success: true, message: 'IP規制を解除しました' };
+	},
+
+	// ペルソナ追加
+	addPersona: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session) {
+			return fail(403, { error: '権限がありません' });
+		}
+
+		const formData = await request.formData();
+		const name = formData.get('personaName')?.toString() || '';
+		const description = formData.get('personaDescription')?.toString() || '';
+
+		if (!name.trim()) {
+			return fail(400, { error: 'ペルソナ名を入力してください' });
+		}
+
+		await db.insert(personas).values({
+			name,
+			description,
+			createdAt: new Date()
+		});
+
+		return { success: true, message: `ペルソナ「${name}」を追加しました` };
+	},
+
+	// ペルソナ更新
+	updatePersona: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session) {
+			return fail(403, { error: '権限がありません' });
+		}
+
+		const formData = await request.formData();
+		const personaId = parseInt(formData.get('personaId')?.toString() || '0');
+		const name = formData.get('personaName')?.toString() || '';
+		const description = formData.get('personaDescription')?.toString() || '';
+
+		if (!personaId) {
+			return fail(400, { error: 'ペルソナIDが不正です' });
+		}
+
+		if (!name.trim()) {
+			return fail(400, { error: 'ペルソナ名を入力してください' });
+		}
+
+		await db
+			.update(personas)
+			.set({ name, description })
+			.where(eq(personas.id, personaId));
+
+		return { success: true, message: `ペルソナを更新しました` };
+	},
+
+	// ペルソナ削除
+	deletePersona: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session) {
+			return fail(403, { error: '権限がありません' });
+		}
+
+		const formData = await request.formData();
+		const personaId = parseInt(formData.get('personaId')?.toString() || '0');
+
+		if (!personaId) {
+			return fail(400, { error: 'ペルソナIDが不正です' });
+		}
+
+		// このペルソナで投稿がある場合は削除できない
+		const personaPosts = await db
+			.select()
+			.from(posts)
+			.where(eq(posts.personaId, personaId))
+			.all();
+
+		if (personaPosts.length > 0) {
+			return fail(400, { error: 'このペルソナには投稿履歴があるため削除できません' });
+		}
+
+		await db.delete(personas).where(eq(personas.id, personaId));
+
+		return { success: true, message: 'ペルソナを削除しました' };
 	}
 };
