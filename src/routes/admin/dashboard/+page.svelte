@@ -17,6 +17,10 @@
 	// レス削除
 	let deletePostId = $state('');
 
+	// 管理者追加
+	let newAdminUsername = $state('');
+	let newAdminPassword = $state('');
+
 	function handleFormSubmit() {
 		return async ({ result }: { result: { type: string } }) => {
 			if (result.type === 'success' || result.type === 'redirect') {
@@ -28,6 +32,8 @@
 				banReason = '';
 				banDuration = 0;
 				deletePostId = '';
+				newAdminUsername = '';
+				newAdminPassword = '';
 			}
 		};
 	}
@@ -39,7 +45,13 @@
 
 <div class="container">
 	<header class="header">
-		<h1>管理者ダッシュボード</h1>
+		<div class="header-left">
+			<h1>管理者ダッシュボード</h1>
+			<span class="user-info">
+				ログイン中: <strong>{data.currentUser.username}</strong>
+				({data.currentUser.role === 'superadmin' ? '最高管理者' : '管理者'})
+			</span>
+		</div>
 		<form method="POST" action="?/logout" use:enhance>
 			<button type="submit" class="logout-btn">ログアウト</button>
 		</form>
@@ -51,6 +63,54 @@
 
 	{#if form?.message}
 		<div class="alert success">{form.message}</div>
+	{/if}
+
+	{#if data.currentUser.role === 'superadmin'}
+	<section class="section">
+		<h2>管理者管理</h2>
+		<form method="POST" action="?/addAdmin" use:enhance={handleFormSubmit}>
+			<div class="form-row inline">
+				<label for="newUsername">ユーザー名:</label>
+				<input type="text" id="newUsername" name="newUsername" bind:value={newAdminUsername} placeholder="3文字以上" required />
+				<label for="newPassword">パスワード:</label>
+				<input type="password" id="newPassword" name="newPassword" bind:value={newAdminPassword} placeholder="6文字以上" required />
+				<button type="submit">管理者追加</button>
+			</div>
+		</form>
+
+		<h3>管理者一覧</h3>
+		<table class="data-table">
+			<thead>
+				<tr>
+					<th>ID</th>
+					<th>ユーザー名</th>
+					<th>権限</th>
+					<th>作成日</th>
+					<th>操作</th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each data.admins as admin}
+					<tr>
+						<td>{admin.id}</td>
+						<td>{admin.username}</td>
+						<td>{admin.role === 'superadmin' ? '最高管理者' : '管理者'}</td>
+						<td>{new Date(admin.createdAt).toLocaleDateString('ja-JP')}</td>
+						<td>
+							{#if admin.role !== 'superadmin'}
+								<form method="POST" action="?/deleteAdmin" use:enhance={handleFormSubmit} class="inline-form">
+									<input type="hidden" name="adminId" value={admin.id} />
+									<button type="submit" class="delete-btn" onclick={(e) => { if (!confirm('本当に削除しますか？')) e.preventDefault(); }}>削除</button>
+								</form>
+							{:else}
+								<span class="no-action">-</span>
+							{/if}
+						</td>
+					</tr>
+				{/each}
+			</tbody>
+		</table>
+	</section>
 	{/if}
 
 	<section class="section">
@@ -197,9 +257,20 @@
 		border-bottom: 2px solid #333;
 	}
 
+	.header-left {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+	}
+
 	.header h1 {
 		font-size: 20px;
 		margin: 0;
+	}
+
+	.user-info {
+		font-size: 13px;
+		color: #666;
 	}
 
 	.logout-btn {
@@ -253,6 +324,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
+		flex-wrap: wrap;
 	}
 
 	.form-row label {
@@ -267,6 +339,7 @@
 	}
 
 	.form-row input[type="text"],
+	.form-row input[type="password"],
 	.form-row input[type="number"],
 	.form-row textarea,
 	.form-row select {
@@ -346,6 +419,10 @@
 	.empty {
 		text-align: center;
 		color: #666;
+	}
+
+	.no-action {
+		color: #999;
 	}
 
 	.footer {

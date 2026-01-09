@@ -1,6 +1,12 @@
 import { db } from '$lib/db';
-import { threads, posts, bannedIps } from '$lib/db/schema';
-import { sql } from 'drizzle-orm';
+import { threads, posts, bannedIps, admins } from '$lib/db/schema';
+import { sql, eq } from 'drizzle-orm';
+import { createHash } from 'crypto';
+
+// パスワードのハッシュ化
+function hashPassword(password: string): string {
+	return createHash('sha256').update(password).digest('hex');
+}
 
 // アプリ起動時にテーブル作成
 async function initDatabase() {
@@ -47,9 +53,34 @@ async function initDatabase() {
 			)
 		`);
 
+		// adminsテーブル作成
+		db.run(sql`
+			CREATE TABLE IF NOT EXISTS admins (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				username TEXT NOT NULL UNIQUE,
+				password TEXT NOT NULL,
+				role TEXT NOT NULL DEFAULT 'admin',
+				created_at INTEGER NOT NULL,
+				created_by INTEGER
+			)
+		`);
+
 		// インデックス作成
 		db.run(sql`CREATE INDEX IF NOT EXISTS idx_posts_thread_id ON posts(thread_id)`);
 		db.run(sql`CREATE INDEX IF NOT EXISTS idx_threads_updated_at ON threads(updated_at)`);
+
+		// 最高管理者が存在しない場合は作成
+		const superadmin = db.select().from(admins).where(eq(admins.role, 'superadmin')).get();
+		if (!superadmin) {
+			const superadminPassword = process.env.ADMIN_PASSWORD || '5151test';
+			db.insert(admins).values({
+				username: 'superadmin',
+				password: hashPassword(superadminPassword),
+				role: 'superadmin',
+				createdAt: new Date()
+			}).run();
+			console.log('Superadmin created');
+		}
 
 		console.log('Database initialized');
 	} catch (error) {

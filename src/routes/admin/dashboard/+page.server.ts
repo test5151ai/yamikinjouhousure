@@ -1,11 +1,35 @@
 import { redirect, fail } from '@sveltejs/kit';
-import { db, threads, posts, bannedIps } from '$lib/db';
-import { eq, desc } from 'drizzle-orm';
+import { db, threads, posts, bannedIps, admins } from '$lib/db';
+import { eq, desc, ne } from 'drizzle-orm';
+import { createHash } from 'crypto';
 import type { PageServerLoad, Actions } from './$types';
 
-export const load: PageServerLoad = async ({ cookies }) => {
+function hashPassword(password: string): string {
+	return createHash('sha256').update(password).digest('hex');
+}
+
+interface SessionData {
+	authenticated: boolean;
+	adminId: number;
+	username: string;
+	role: string;
+}
+
+function getSession(cookies: { get: (name: string) => string | undefined }): SessionData | null {
 	const session = cookies.get('admin_session');
-	if (session !== 'authenticated') {
+	if (!session) return null;
+	try {
+		const data = JSON.parse(session);
+		if (data.authenticated) return data;
+	} catch {
+		// Invalid session
+	}
+	return null;
+}
+
+export const load: PageServerLoad = async ({ cookies }) => {
+	const session = getSession(cookies);
+	if (!session) {
 		redirect(302, '/admin');
 	}
 
@@ -21,6 +45,22 @@ export const load: PageServerLoad = async ({ cookies }) => {
 		.orderBy(desc(bannedIps.createdAt))
 		.all();
 
+	// 管理者一覧（最高管理者のみ表示）
+	let adminList: { id: number; username: string; role: string; createdAt: string }[] = [];
+	if (session.role === 'superadmin') {
+		const adminsData = await db
+			.select()
+			.from(admins)
+			.orderBy(desc(admins.createdAt))
+			.all();
+		adminList = adminsData.map((a) => ({
+			id: a.id,
+			username: a.username,
+			role: a.role,
+			createdAt: a.createdAt.toISOString()
+		}));
+	}
+
 	return {
 		threads: threadList.map((t) => ({
 			...t,
@@ -31,7 +71,12 @@ export const load: PageServerLoad = async ({ cookies }) => {
 			...b,
 			createdAt: b.createdAt.toISOString(),
 			expiresAt: b.expiresAt?.toISOString() || null
-		}))
+		})),
+		admins: adminList,
+		currentUser: {
+			username: session.username,
+			role: session.role
+		}
 	};
 };
 
@@ -42,8 +87,83 @@ export const actions: Actions = {
 		redirect(302, '/admin');
 	},
 
+	// 管理者追加（最高管理者のみ）
+	addAdmin: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session || session.role !== 'superadmin') {
+			return fail(403, { error: '権限がありません' });
+		}
+
+		const formData = await request.formData();
+		const username = formData.get('newUsername')?.toString() || '';
+		const password = formData.get('newPassword')?.toString() || '';
+
+		if (!username.trim() || !password.trim()) {
+			return fail(400, { error: 'ユーザー名とパスワードを入力してください' });
+		}
+
+		if (username.length < 3) {
+			return fail(400, { error: 'ユーザー名は3文字以上にしてください' });
+		}
+
+		if (password.length < 6) {
+			return fail(400, { error: 'パスワードは6文字以上にしてください' });
+		}
+
+		// 既存のユーザーをチェック
+		const existing = db.select().from(admins).where(eq(admins.username, username)).get();
+		if (existing) {
+			return fail(400, { error: 'このユーザー名は既に使用されています' });
+		}
+
+		await db.insert(admins).values({
+			username,
+			password: hashPassword(password),
+			role: 'admin',
+			createdAt: new Date(),
+			createdBy: session.adminId
+		});
+
+		return { success: true, message: `管理者「${username}」を追加しました` };
+	},
+
+	// 管理者削除（最高管理者のみ）
+	deleteAdmin: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session || session.role !== 'superadmin') {
+			return fail(403, { error: '権限がありません' });
+		}
+
+		const formData = await request.formData();
+		const adminId = parseInt(formData.get('adminId')?.toString() || '0');
+
+		if (!adminId) {
+			return fail(400, { error: '管理者IDが不正です' });
+		}
+
+		// 自分自身は削除できない
+		if (adminId === session.adminId) {
+			return fail(400, { error: '自分自身は削除できません' });
+		}
+
+		// 最高管理者は削除できない
+		const targetAdmin = db.select().from(admins).where(eq(admins.id, adminId)).get();
+		if (targetAdmin?.role === 'superadmin') {
+			return fail(400, { error: '最高管理者は削除できません' });
+		}
+
+		await db.delete(admins).where(eq(admins.id, adminId));
+
+		return { success: true, message: '管理者を削除しました' };
+	},
+
 	// 新規スレッド作成
-	createThread: async ({ request }) => {
+	createThread: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session) {
+			return fail(403, { error: '権限がありません' });
+		}
+
 		const formData = await request.formData();
 		const threadNumber = parseInt(formData.get('threadNumber')?.toString() || '1');
 		const title = formData.get('title')?.toString() || '';
@@ -91,7 +211,12 @@ export const actions: Actions = {
 	},
 
 	// スレッド削除
-	deleteThread: async ({ request }) => {
+	deleteThread: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session) {
+			return fail(403, { error: '権限がありません' });
+		}
+
 		const formData = await request.formData();
 		const threadId = parseInt(formData.get('threadId')?.toString() || '0');
 
@@ -108,7 +233,12 @@ export const actions: Actions = {
 	},
 
 	// レス削除
-	deletePost: async ({ request }) => {
+	deletePost: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session) {
+			return fail(403, { error: '権限がありません' });
+		}
+
 		const formData = await request.formData();
 		const postId = parseInt(formData.get('postId')?.toString() || '0');
 
@@ -126,7 +256,12 @@ export const actions: Actions = {
 	},
 
 	// IP規制追加
-	banIp: async ({ request }) => {
+	banIp: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session) {
+			return fail(403, { error: '権限がありません' });
+		}
+
 		const formData = await request.formData();
 		const ipAddress = formData.get('ipAddress')?.toString() || '';
 		const reason = formData.get('reason')?.toString() || '';
@@ -158,7 +293,12 @@ export const actions: Actions = {
 	},
 
 	// IP規制解除
-	unbanIp: async ({ request }) => {
+	unbanIp: async ({ request, cookies }) => {
+		const session = getSession(cookies);
+		if (!session) {
+			return fail(403, { error: '権限がありません' });
+		}
+
 		const formData = await request.formData();
 		const banId = parseInt(formData.get('banId')?.toString() || '0');
 

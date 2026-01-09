@@ -38,6 +38,16 @@ export const bannedIps = sqliteTable('banned_ips', {
 	expiresAt: integer('expires_at', { mode: 'timestamp' })
 });
 
+// 管理者テーブル
+export const admins = sqliteTable('admins', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	username: text('username').notNull().unique(),
+	password: text('password').notNull(),
+	role: text('role').notNull().default('admin'), // 'superadmin' or 'admin'
+	createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+	createdBy: integer('created_by')
+});
+
 // 型エクスポート
 export type Thread = typeof threads.$inferSelect;
 export type NewThread = typeof threads.$inferInsert;
@@ -45,3 +55,5 @@ export type Post = typeof posts.$inferSelect;
 export type NewPost = typeof posts.$inferInsert;
 export type BannedIp = typeof bannedIps.$inferSelect;
 export type NewBannedIp = typeof bannedIps.$inferInsert;
+export type Admin = typeof admins.$inferSelect;
+export type NewAdmin = typeof admins.$inferInsert;

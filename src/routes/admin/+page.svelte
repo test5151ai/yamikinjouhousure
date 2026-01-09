@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 
 	let { form } = $props();
+	let username = $state('');
 	let password = $state('');
 	let isSubmitting = $state(false);
 
@@ -33,6 +34,17 @@
 
 		<form method="POST" action="?/login" use:enhance={handleSubmit}>
 			<div class="form-row">
+				<label for="username">ユーザー名:</label>
+				<input
+					type="text"
+					id="username"
+					name="username"
+					bind:value={username}
+					required
+					autofocus
+				/>
+			</div>
+			<div class="form-row">
 				<label for="password">パスワード:</label>
 				<input
 					type="password"
@@ -40,7 +52,6 @@
 					name="password"
 					bind:value={password}
 					required
-					autofocus
 				/>
 			</div>
 			<div class="form-row">
