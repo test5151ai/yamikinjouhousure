@@ -1,5 +1,4 @@
 import { fail, redirect } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
 import type { PageServerLoad, Actions } from './$types';
 
 export const load: PageServerLoad = async ({ cookies }) => {
@@ -15,7 +14,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 		const password = formData.get('password')?.toString() || '';
 
-		const adminPassword = env.ADMIN_PASSWORD || 'admin123';
+		const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
 
 		if (password !== adminPassword) {
 			return fail(401, { error: 'パスワードが間違っています' });
