@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 
 	let { form } = $props();
 	let password = $state('');
@@ -7,8 +8,13 @@
 
 	function handleSubmit() {
 		isSubmitting = true;
-		return async () => {
+		return async ({ result, update }) => {
 			isSubmitting = false;
+			if (result.type === 'redirect') {
+				await goto(result.location);
+			} else {
+				await update();
+			}
 		};
 	}
 </script>
